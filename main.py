@@ -25,7 +25,7 @@ eps_s = [0.1,0.3,0.5,0.7,0.9]
 count = 0
 overall_reward = {}
 overall_variance = {}
-total_times = 100
+total_times = 50
 print("X is:", X_list)
 rank_list = {}
 # state = True
@@ -91,7 +91,7 @@ for homo_deg in homo_degrees:
                         print("process_result is None, Error!")
                         exit(0)
                     temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reward.values()))
-                    overall_reward[policy+str(eps)].append(temp_reward)
+                    overall_reward[policy+str(eps)].append(np.sum(list(temp_reward.values())))
                     overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reward.items()]))
                     # temp_rank_rep[policy+str(eps)]=np.var([rep for k, rep in temp_reputation.items()])
             else:
@@ -108,10 +108,10 @@ for homo_deg in homo_degrees:
                                                              Graph=new_graph,
                                                              friend_est_pref=new_friend_pref,
                                                              adopted_node=new_adopted_node,
-                                                             time_step=10,
+                                                             time_step=5,
                                                              process_result=temp_process_result[policy],
                                                              pref_mse_list=temp_mse_list[policy + str(eps)])
-                overall_reward[policy].append(temp_reward)
+                overall_reward[policy].append(np.sum(list(temp_reward.values())))
                 overall_variance[policy].append(np.var([rep for k, rep in temp_reward.items()]))
                 temp_rank_rep[policy] = np.var([rep for k, rep in temp_reward.items()])
                 temp_pair_vectors[policy] = np.array(list(temp_reward.values()))

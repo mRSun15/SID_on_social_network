@@ -254,7 +254,7 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
             except Exception as e:
                 print(e)
 
-    seed_node_num = int(node_num * 0.1)
+    seed_node_num = int(node_num * 0.015)
     seed_nodes = np.random.choice(node_num, seed_node_num, replace=False)
 
     adopted_node = {node: [0] for node in seed_nodes}
@@ -355,12 +355,14 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         total_past_reward[X_name] = {}
 
         for time in range(1, total_time):
+            # print(time)
             # print('time is: ', time)
             flag = False
             cur_reward = {}
             cur_friend_pref = {}
             if len(temp_adopted_nodes) <= 0:
-                print("No adopted nodes, error!")
+                last_time = time - 1
+                # print("No adopted nodes, error!")
                 break
             for node in graph.nodes():
 
@@ -401,8 +403,6 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                             if chosen_node not in temp_adopted_nodes and chosen_node not in temp_remove_nodes:
                                 temp_adopted_nodes[chosen_node] = [time]
 
-                            else:
-                                temp_adopted_nodes[chosen_node].append(time)
                             parent_recommends[chosen_node].append(node)
                         else:
                             node_feedback = 0
@@ -423,6 +423,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                     for nbr in graph[node]:
                         if nbr not in chosen_list:
                             cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
+
                     del temp_adopted_nodes[node]
                     temp_remove_nodes[node] = [time]
 
@@ -432,6 +433,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
             friend_pref[time] = cur_friend_pref
+            # print(time)
             total_past_reward[X_name][time] = cur_reward
             if not flag:
                 # print("No adopt?, time is: ",time)
@@ -440,6 +442,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         collective_adopted.append(temp_adopted_nodes)
 
         friend_pref[0] = friend_pref[last_time]
+        # print("All the adopted nodes:", len(temp_remove_nodes.keys()))
         pref_mse_list[X_name] = compute_pref_mse(friend_pref[0], graph)
 
     for X_name in total_past_reward.keys():
@@ -494,14 +497,14 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
     node_color = []
     node_size = []
     node_reward = nx.get_node_attributes(result__graph, 'reward')
-    total_reward = 0
+    total_reward = {}
     for (node, reward) in node_reward.items():
         if reward > 0:
             node_color.append('red')
         elif reward <= 0:
             node_color.append('blue')
         node_size.append(np.abs(reward) * 100)
-        total_reward += reward
+        total_reward[node] = reward
     if plot_state:
         nx.draw(G=result__graph,
                 pos=pos,
