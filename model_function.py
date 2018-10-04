@@ -19,17 +19,117 @@ def update_friend_pref(prior_theta, X, y, w_ij):
     return np.squeeze(mu_t_1.T).astype(float), np.array(S_t_1).astype(float)
     # return [[mu_t_1[i,0], S_t_1[i,i]] for i in range(dim)]
 
+def balanced_strategy(node_list):
+    '''
+
+    :param node_list: the list of all available nodes
+    :return: the chosen node list
+
+    '''
+    node_num = len(node_list)
+    random_chose = np.random.choice([True, False], node_num, replace=True)
+
+    chosen_nodes = [node_list[i] for i in range(node_num) if random_chose[i] == True]
+
+    return  chosen_nodes
+
+def greedy_strategy(reward_list):
+    '''
+
+    :param reward_list: the reward list for all the available nodes
+    :return: the chosen node list
+    '''
+    result_nodes = []
+    for node in reward_list.keys():
+        if reward_list[node] >= 0:
+            result_nodes.append(node)
+
+    return result_nodes
+
+def e_greedy_strategy(reward_list, epsilon_greedy):
+    '''
+
+    :param reward_list: the reward list for all the availabel nodes
+    :param epsilon_greedy: the probability for chosen greedy
+    :return: the chosen node list
+    '''
+    result_nodes = []
+    for node in reward_list.keys():
+        if np.random.uniform(0, 1, 1) <= epsilon_greedy:
+            if reward_list[node] >= 0:
+                result_nodes.append(node)
+        else:
+            if np.random.uniform(0, 1, 1) <= 0.5:
+                result_nodes.append(node)
+
+    return  result_nodes
+
+def thompson_sample(Graph, individual_node, available_nodes, est_friend_pred, new_reward, X, sample_times = 20):
+    for nbr in available_nodes:
+        estimate_mean = est_friend_pred[nbr]['mean']
+        estimate_cov = est_friend_pred[nbr]['cov']
+        new_reward[nbr] = 0
+        try:
+            estimate_sample = np.random.multivariate_normal(mean=estimate_mean,
+                                                            cov=estimate_cov,
+                                                            size=sample_times)
+        except Exception as e:
+            print(e)
+            print(estimate_mean.dtype)
+            print(estimate_cov.dtype)
+            exit()
+        for times in range(sample_times):
+            new_reward[nbr] += logistic_func(X, estimate_sample[times])
+
+    result_nodes = [key for key, value in new_reward.items() if value > 0]
+
+    return result_nodes
+
+def ucb_strategy(Graph, individual_node ,ucb_counts, new_reward):
+
+    result_nodes = []
+    for nbr in new_reward.keys():
+        past_chosen = ucb_counts[individual_node][nbr]
+        total_counts = past_chosen['choose'] + past_chosen['not_choose']
+        if (new_reward[nbr] + np.sqrt(2 * np.log1p(total_counts) / (past_chosen['choose'] + 1))) >\
+                (0 + np.sqrt(2 * np.log1p(total_counts) / (past_chosen['not_choose'] + 1))):
+
+            result_nodes.append(nbr)
+            ucb_counts[individual_node][nbr]['choose'] += 1
+        else:
+            ucb_counts[individual_node][nbr]['not_choose'] += 1
+    return result_nodes
 
 def friend_selection(Graph, individual_type, individual_node, policy, friend_pref, past_reward, X, time, parent_nodes,
-                     recommended_nodes, ucb_counts,ucb_times,epsilon_greedy=0.5):
+                    ucb_counts,epsilon_greedy=0.5):
+    '''
+
+    :param Graph:  networkx.graph
+    :param individual_type: 'neutral' or 'risk-aversion' (different type for individual)
+    :param individual_node: active node, person who will recommend products to his neighbors
+    :param policy: different strategy/policy, e.g "thompson", "greedy", "balanced"...
+    :param friend_pref: predicted_friend's preference.
+    :param past_reward: dict, the total reward from time 0.....T-1
+    :param X: product's attribute
+    :param time: current time T
+    :param parent_nodes: the nodes who recommend to active node(individual node)
+    :param ucb_counts: utilized by ucb
+    :param epsilon_greedy: decide the probability of choosing greedy strategy or balanced.
+    :return:
+
+    Attention:
+        the function has been rewritten to the new version, which is more similar to the Independent Cascade model.
+
+    '''
     new_reward = {}
-    # if no neighbors
+    # available neighbors, exclude the pareent_nodes.
     availabel_nodes = [node for node in Graph.neighbors(individual_node)]
     availabel_nodes = list(set(availabel_nodes) - set(parent_nodes[individual_node]))
-    availabel_nodes = list(set(availabel_nodes) - set(recommended_nodes[individual_node]))
     if len(availabel_nodes) == 0:
         # isolated node
-        return -1, 0
+        return [], []
+
+    # compute the predicted reward for every node.
 
     if individual_type == 'neutral':
         for nbr in availabel_nodes:
@@ -51,61 +151,31 @@ def friend_selection(Graph, individual_type, individual_node, policy, friend_pre
                 new_reward[nbr] = estimate_risk_adverse(X, friend_pref[0][individual_node][nbr])
 
     # chose the friend according to the policy
-    chosen_node = -1
-    if policy == 'balanced':
-        chosen_node = np.random.choice(availabel_nodes)
-    elif policy == 'greedy':
-        chosen_node = max(new_reward, key=new_reward.get)
-    elif policy == 'e-greedy':
-        if np.random.uniform(0, 1, 1) > epsilon_greedy:
-            chosen_node = max(new_reward, key=new_reward.get)
-        else:
-            chosen_node = np.random.choice(availabel_nodes)
-    elif policy == 'ucb':
-        past_chosen = ucb_counts[individual_node]
+    # the selected results is a list, including all the possible nodes.
+    chosen_nodes = []
 
-        # past_chosen = Counter([past_reward[past_time][individual_node][0] for past_time in past_reward.keys()])
-        for nbr in availabel_nodes:
-            try:
-                new_reward[nbr] += np.sqrt(2 * np.log1p(ucb_times) / (past_chosen[nbr] + 1))
-            except Exception as e:
-                print(e)
-                print("wrong node, neighbor: ", individual_node, nbr)
-                exit()
-        chosen_node = max(new_reward, key=new_reward.get)
+    if policy == 'balanced':
+        chosen_nodes = balanced_strategy(availabel_nodes)
+    elif policy == 'greedy':
+        chosen_nodes = greedy_strategy(new_reward)
+    elif policy == 'e-greedy':
+        chosen_nodes = e_greedy_strategy(new_reward, epsilon_greedy)
     elif policy == 'thompson':
-        chosen_node = thompson_sample(Graph, individual_node, availabel_nodes, friend_pref[time - 1][individual_node], new_reward, X, 10)
+        chosen_nodes = thompson_sample(Graph, individual_node, availabel_nodes, friend_pref[time - 1][individual_node], new_reward, X, 10)
+    elif policy == 'ucb':
+        chosen_nodes = ucb_strategy(Graph, individual_node, ucb_counts, new_reward)
 
     if individual_type == 'risk' or policy == 'ucb' or policy == 'thompson':
-        new_reward[chosen_node] = estimate_reward(X, friend_pref[time - 1][individual_node][chosen_node])
+        for chosen_node in chosen_nodes:
+            new_reward[chosen_node] = estimate_reward(X, friend_pref[time - 1][individual_node][chosen_node])
     # print(friend_pref[time-1][individual_node][nbr]['mean'])
     # print(new_reward[chosen_node])
-    if new_reward[chosen_node] < 0:
-        return -1, 0
 
-    recommended_nodes[individual_node].append(chosen_node)
-    ucb_counts[individual_node][chosen_node] += 1
-    return chosen_node, new_reward[chosen_node]
+    if len(chosen_nodes) < 0:
+        return [], []
 
+    return chosen_nodes, [new_reward[chosen_node] for chosen_node in chosen_nodes]
 
-def thompson_sample(Graph, individual_node, available_nodes, est_friend_pred, new_reward, X, sample_times = 20):
-    for nbr in available_nodes:
-        estimate_mean = est_friend_pred[nbr]['mean']
-        estimate_cov = est_friend_pred[nbr]['cov']
-        new_reward[nbr] = 0
-        try:
-            estimate_sample = np.random.multivariate_normal(mean=estimate_mean,
-                                                            cov=estimate_cov,
-                                                            size=sample_times)
-        except Exception as e:
-            print(e)
-            print(estimate_mean.dtype)
-            print(estimate_cov.dtype)
-            exit()
-        for times in range(sample_times):
-            new_reward[nbr] += logistic_func(X, estimate_sample[times])
-
-    return max(new_reward, key=new_reward.get)
 
 def Union_Graph(G, H):
     mapping = {}
@@ -212,9 +282,9 @@ def set_personal_pref(Graph, homophily_degree, pref_dim):
         # new_b_combinations = b_combinations_.dot(eigenvects[:,-3:-1].T).T
         # print(new_b_combinations)
     elif homophily_degree == 'medium':
-        b_combinations = b_combinations.dot(eigenvects[:, 16:18].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 50:52].T).T
     elif homophily_degree == 'weak':
-        b_combinations = b_combinations.dot(eigenvects[:, 42:44].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 150:152].T).T
         # print(b_combinations)
 
     for n_idx, n in enumerate(Graph.nodes()):
@@ -267,8 +337,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         reputation[n] = 0
         for nbr in graph.neighbors(n):
             # print(n, nbr)
-            ucb_counts[n][nbr] = 0
-    ucb_times = 0
+            ucb_counts[n][nbr] = {'choose': 0, 'not_choose': 0}
     name_count = 1
     pref_mse_list['0_0_0'] = compute_pref_mse(friend_pref[0], graph)
 
@@ -276,16 +345,14 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
 
     for X in X_list:
         temp_adopted_nodes = copy.deepcopy(adopted_node)
+        temp_remove_nodes = {}
         parent_recommends = {}
-        recommended_nodes = {}
         for n in graph.nodes():
             parent_recommends[n] = []
-            recommended_nodes[n] = []
         last_time = total_time-1
         X_name = ' '.join(str(e) for e in X) + '_' + str(name_count)
         name_count += 1
         total_past_reward[X_name] = {}
-
 
         for time in range(1, total_time):
             # print('time is: ', time)
@@ -299,7 +366,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
 
                 if node in temp_adopted_nodes and len(graph.neighbors(node)) > 0:
                     # adopted recommendation stratedy
-                    chosen_node, reward = friend_selection(Graph=graph,
+                    chosen_list, reward = friend_selection(Graph=graph,
                                                            individual_type=individual_type,
                                                            individual_node=node,
                                                            friend_pref=friend_pref,
@@ -308,52 +375,56 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                                                            policy=policy,
                                                            past_reward=total_past_reward[X_name],
                                                            parent_nodes=parent_recommends,
-                                                           recommended_nodes=recommended_nodes,
                                                            ucb_counts=ucb_counts,
-                                                           ucb_times=ucb_times,
                                                            epsilon_greedy=eps_greedy)
 
 
                     cur_friend_pref[node] = {}
-                    ucb_times += 1
-                    if chosen_node == -1:
+                    if len(chosen_list) <= 0:
                         # print("Node: ",node," choose no node!")
                         for nbr in graph[node]:
                             cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
                         continue
-                    friend_reward = logistic_func(X, graph.node[chosen_node]['pref'])
-                    cur_reward[node] = [chosen_node, friend_reward]
+                    friend_reward = {}
+                    for chosen_node in chosen_list:
+                        friend_reward[chosen_node] = logistic_func(X, graph.node[chosen_node]['pref'])
+                    cur_reward[node] = [chosen_list, np.sum(list(friend_reward.values()))]
                     # print("Time: ", time," Current reward is ", friend_reward)
-                    if friend_reward >= 0:
-                        # print('recommendation successful!')
-                        node_feedback = 1
-                        reputation[node] += 1
-                        if chosen_node not in temp_adopted_nodes:
-                            temp_adopted_nodes[chosen_node] = [time]
 
+                    # update the predicted preference
+
+                    for chosen_node in chosen_list:
+                        if friend_reward[chosen_node] >= 0:
+                            # print('recommendation successful!')
+                            node_feedback = 1
+                            reputation[node] += 1
+                            if chosen_node not in temp_adopted_nodes and chosen_node not in temp_remove_nodes:
+                                temp_adopted_nodes[chosen_node] = [time]
+
+                            else:
+                                temp_adopted_nodes[chosen_node].append(time)
+                            parent_recommends[chosen_node].append(node)
                         else:
-                            temp_adopted_nodes[chosen_node].append(time)
-                        parent_recommends[chosen_node].append(node)
-                    else:
-                        node_feedback = 0
-                    flag = True
+                            node_feedback = 0
+                        flag = True
 
-
-                    new_mean, new_cov = update_friend_pref(prior_theta=friend_pref[time - 1][node][chosen_node],
-                                                           X=X,
-                                                           y=node_feedback,
-                                                           w_ij=graph[node][chosen_node]['weight'])
-                    cur_friend_pref[node][chosen_node] = {}
-                    cur_friend_pref[node][chosen_node]['mean'] = new_mean
-                    cur_friend_pref[node][chosen_node]['cov'] = new_cov
-                    # graph = preference_update(Graph=graph,
-                    #                           friend_feedback=node_feedback,
-                    #                           individual_node=node,
-                    #                           friend=chosen_node,
-                    #                           epsilon=0.05)
+                        new_mean, new_cov = update_friend_pref(prior_theta=friend_pref[time - 1][node][chosen_node],
+                                                               X=X,
+                                                               y=node_feedback,
+                                                               w_ij=graph[node][chosen_node]['weight'])
+                        cur_friend_pref[node][chosen_node] = {}
+                        cur_friend_pref[node][chosen_node]['mean'] = new_mean
+                        cur_friend_pref[node][chosen_node]['cov'] = new_cov
+                        # graph = preference_update(Graph=graph,
+                        #                           friend_feedback=node_feedback,
+                        #                           individual_node=node,
+                        #                           friend=chosen_node,
+                        #                           epsilon=0.05)
                     for nbr in graph[node]:
-                        if nbr != chosen_node:
+                        if nbr not in chosen_list:
                             cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
+                    del temp_adopted_nodes[node]
+                    temp_remove_nodes[node] = [time]
 
                 if node not in cur_friend_pref:
                     cur_friend_pref[node] = {}
@@ -385,7 +456,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
             for time in past_reward.keys():
                 if len(past_reward[time]) == 0:
                     continue
-                if node in past_reward[time] and past_reward[time][node][0] is not None:
+                if node in past_reward[time] and len(past_reward[time][node][0]) <= 0:
                     temp_reward.append(past_reward[time][node][1])
         # print(np.nansum(temp_reward))
         # print(temp_reward)

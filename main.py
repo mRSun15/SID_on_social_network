@@ -1,14 +1,13 @@
-import copy
-from model_function import *
-import scipy.stats
 import csv
-import seaborn as sns; sns.set()
+import seaborn as sns
+from model_function import *
 import pickle
 
-# homo_degrees = ['weak', 'strong']
+
+sns.set()
 homo_degrees = ['weak', 'medium', 'strong']
 
-X_number = 8
+X_number = 10
 random_set = [-1, 1]
 X_list = []
 for i in range(X_number):
@@ -21,47 +20,12 @@ plt.figure(num=2, figsize=(20, 10), dpi=80, facecolor='yellow', edgecolor='k')
 # plt.figure(num=4, figsize=(30, 10), dpi=80, facecolor='yellow', edgecolor='k')
 
 policies = ['thompson','greedy', 'e-greedy','balanced', 'ucb']
-# policies_without_e = ['thompson','greedy', 'balanced', 'ucb']
-# policies = ['balanced','greedy', 'ucb', 'thompson']
+
 eps_s = [0.1,0.3,0.5,0.7,0.9]
 count = 0
-overall_adoption = {}
+overall_reward = {}
 overall_variance = {}
-# total_times = 30
-# for X in X_list:
-#     print("X is:", X)
-#     for homo_deg in homo_degrees:
-#         for time in range(total_times):
-#             Graph, friend_pref, adopt_nodes = create_network(node_num=50,
-#                                                              p=0.1,
-#                                                              pref_range=10,
-#                                                              pref_dim=2,
-#                                                              homo_degree=homo_deg)
-#
-#             for policy in policies:
-#                 new_graph = copy.deepcopy(Graph)
-#                 new_adopted_node = copy.deepcopy(adopt_nodes)
-#                 # plt.subplot(161+count)
-#                 count += 1
-#                 if policy not in overall_adoption:
-#                     overall_adoption[policy] = plot_adoption(individual_type='neutral',
-#                                                              policy=policy,
-#                                                              X = X,
-#                                                              Graph=new_graph,
-#                                                              friend_est_pref=friend_pref,
-#                                                              adopted_node=new_adopted_node)
-#                 else:
-#                     overall_adoption[policy] += plot_adoption(individual_type='neutral',
-#                                                              policy=policy,
-#                                                              X = X,
-#                                                              Graph=new_graph,
-#                                                              friend_est_pref=friend_pref,
-#                                                              adopted_node=new_adopted_node)
-#         for policy in policies:
-#             overall_adoption[policy] /= total_times
-#         print('homophily is :', homo_deg)
-#         print(overall_adoption)
-total_times = 400
+total_times = 100
 print("X is:", X_list)
 rank_list = {}
 # state = True
@@ -77,10 +41,10 @@ for homo_deg in homo_degrees:
     for policy in policies:
         if policy == 'e-greedy':
             for eps in eps_s:
-                overall_adoption[policy+str(eps)] = []
+                overall_reward[policy+str(eps)] = []
                 overall_variance[policy+str(eps)] = []
         else:
-            overall_adoption[policy] = []
+            overall_reward[policy] = []
             overall_variance[policy] = []
     for time in range(total_times):
         temp_pair_vectors = {}
@@ -93,6 +57,7 @@ for homo_deg in homo_degrees:
                                                          pref_range=10,
                                                          pref_dim=2,
                                                          homo_degree=homo_deg)
+        # plot the initial state
         # plt.subplot(161+count)
         # count += 1
         # Graph_initial_check(Graph=Graph,
@@ -111,7 +76,7 @@ for homo_deg in homo_degrees:
                     new_friend_pref = copy.deepcopy(friend_pref)
                     # plt.subplot(161+count)
                     # count += 1
-                    temp_adoption, temp_reputation = plot_reward(individual_type='neutral',
+                    temp_reward, temp_reputation = plot_reward(individual_type='neutral',
                                                                  policy=policy,
                                                                  X_list = X_list,
                                                                  Graph=new_graph,
@@ -125,9 +90,9 @@ for homo_deg in homo_degrees:
                     if len(temp_process_result[policy+str(eps)].keys()) == 0:
                         print("process_result is None, Error!")
                         exit(0)
-                    temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reputation.values()))
-                    overall_adoption[policy+str(eps)].append(temp_adoption)
-                    overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reputation.items()]))
+                    temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reward.values()))
+                    overall_reward[policy+str(eps)].append(temp_reward)
+                    overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reward.items()]))
                     # temp_rank_rep[policy+str(eps)]=np.var([rep for k, rep in temp_reputation.items()])
             else:
                 temp_process_result[policy] = {}
@@ -137,7 +102,7 @@ for homo_deg in homo_degrees:
                 new_friend_pref = copy.deepcopy(friend_pref)
                 # plt.subplot(161+count)
                 # count += 1
-                temp_adoption, temp_reputation = plot_reward(individual_type='neutral',
+                temp_reward, temp_reputation = plot_reward(individual_type='neutral',
                                                              policy=policy,
                                                              X_list=X_list,
                                                              Graph=new_graph,
@@ -146,10 +111,10 @@ for homo_deg in homo_degrees:
                                                              time_step=10,
                                                              process_result=temp_process_result[policy],
                                                              pref_mse_list=temp_mse_list[policy + str(eps)])
-                overall_adoption[policy].append(temp_adoption)
-                overall_variance[policy].append(np.var([rep for k, rep in temp_reputation.items()]))
-                temp_rank_rep[policy] = np.var([rep for k, rep in temp_reputation.items()])
-                temp_pair_vectors[policy] = np.array(list(temp_reputation.values()))
+                overall_reward[policy].append(temp_reward)
+                overall_variance[policy].append(np.var([rep for k, rep in temp_reward.items()]))
+                temp_rank_rep[policy] = np.var([rep for k, rep in temp_reward.items()])
+                temp_pair_vectors[policy] = np.array(list(temp_reward.values()))
         overall_pair_vectors.append(temp_pair_vectors)
         overall_processed_res.append(temp_process_result)
         overall_mse_list.append(temp_mse_list)
@@ -167,40 +132,40 @@ for homo_deg in homo_degrees:
         # rank_reputation.append([temp_rank_rep[key] for key in policies_without_e])
         # relative_reputation.append([temp_rela_rep[key] for key in policies_without_e])
 
-    sum_adoption = {}
-    std_adoption = {}
-    new_adoption = overall_adoption
+    sum_reward = {}
+    std_reward = {}
+    new_reward = overall_reward
     new_performance = {}
-    # print(overall_adoption['balanced'][0])
+    # print(overall_reward['balanced'][0])
     for policy in policies:
 
         if policy == 'e-greedy':
-            sum_adoption[policy] = {}
-            std_adoption[policy] = {}
+            sum_reward[policy] = {}
+            std_reward[policy] = {}
 
             for eps in eps_s:
-                # sum_adoption[policy+str(eps)] = [np.sum([adoption[count] for adoption in overall_adoption[policy+str(eps)]])/total_times
+                # sum_reward[policy+str(eps)] = [np.sum([reward[count] for reward in overall_reward[policy+str(eps)]])/total_times
                 #                              for count in range(len(X_list))]
-                # new_adoption[policy+str(eps)] = []
+                # new_reward[policy+str(eps)] = []
 
                 new_performance[policy+str(eps)] = {}
-                # for single_adoption in overall_adoption[policy+str(eps)]:
-                #     new_adoption[policy+str(eps)].append(np.sum(single_adoption))
-                new_performance[policy+str(eps)]['adopt_medium'] = np.median(new_adoption[policy+str(eps)])
-                new_performance[policy+str(eps)]['adopt_mean'] = np.mean(new_adoption[policy+str(eps)])
-                new_performance[policy+str(eps)]['adopt_std'] = np.std(new_adoption[policy+str(eps)])
+                # for single_reward in overall_reward[policy+str(eps)]:
+                #     new_reward[policy+str(eps)].append(np.sum(single_reward))
+                new_performance[policy+str(eps)]['adopt_medium'] = np.median(new_reward[policy+str(eps)])
+                new_performance[policy+str(eps)]['adopt_mean'] = np.mean(new_reward[policy+str(eps)])
+                new_performance[policy+str(eps)]['adopt_std'] = np.std(new_reward[policy+str(eps)])
                 new_performance[policy+str(eps)]['var_mean'] = np.mean(overall_variance[policy+str(eps)])
                 new_performance[policy+str(eps)]['var_std'] = np.std(overall_variance[policy+str(eps)])
                 new_performance[policy+str(eps)]['var_medium'] = np.median(overall_variance[policy+str(eps)])
         else:
-            # new_adoption[policy] = []
+            # new_reward[policy] = []
             new_performance[policy] = {}
-            # sum_adoption[policy] = [np.sum([adoption[count] for adoption in overall_adoption[policy]])/total_times for count in range(len(X_list))]
-            # for single_adoption in overall_adoption[policy]:
-            #     new_adoption[policy].append(np.sum(single_adoption))
-            new_performance[policy]['adopt_mean'] = np.mean(new_adoption[policy])
-            new_performance[policy]['adopt_std'] = np.std(new_adoption[policy])
-            new_performance[policy]['adopt_medium'] = np.median(new_adoption[policy])
+            # sum_reward[policy] = [np.sum([reward[count] for reward in overall_reward[policy]])/total_times for count in range(len(X_list))]
+            # for single_reward in overall_reward[policy]:
+            #     new_reward[policy].append(np.sum(single_reward))
+            new_performance[policy]['adopt_mean'] = np.mean(new_reward[policy])
+            new_performance[policy]['adopt_std'] = np.std(new_reward[policy])
+            new_performance[policy]['adopt_medium'] = np.median(new_reward[policy])
             new_performance[policy]['var_mean'] = np.mean(overall_variance[policy])
             new_performance[policy]['var_std'] = np.std(overall_variance[policy])
             new_performance[policy]['var_medium'] = np.median(overall_variance[policy])
@@ -208,7 +173,7 @@ for homo_deg in homo_degrees:
 
     with open(str(homo_deg)+ '_adopt_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
-        for key, value in new_adoption.items():
+        for key, value in new_reward.items():
             writer.writerow([key, value])
     with open(str(homo_deg) + '_var_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
@@ -221,14 +186,14 @@ for homo_deg in homo_degrees:
     with open(str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
         pickle.dump(overall_mse_list, m_file)
 
-    # statistic, p_value = scipy.stats.ttest_ind(overall_adoption['balanced'], overall_adoption['greedy'])
+    # statistic, p_value = scipy.stats.ttest_ind(overall_reward['balanced'], overall_reward['greedy'])
     # print("Statistc: ", statistic, "; p_value: ", p_value)
     # print(new_performance)
-    print('policies\t\tadopt_mean\tadopt_std\t\tvar_mean\tvar_std')
+    print('policies\t\treward_mean\treward_std\t\tvar_mean\tvar_std')
     for name, values in new_performance.items():
         print('{}\t\t{}\t{}\t\t{}\t{}'.format(name, values['adopt_medium'],values['adopt_std'], values['var_medium'], values['var_std']))
 
-    # Plot the adoption means
+    # Plot the reward means
 
     means = [new_performance[policy]['adopt_mean'] for policy in new_performance.keys()]
     median = [new_performance[policy]['adopt_medium']  for policy in new_performance.keys()]
@@ -272,3 +237,39 @@ for homo_deg in homo_degrees:
     plt.yticks(np.arange(0, 20, 10))
     count += 1
 plt.show()
+
+
+# total_times = 30
+# for X in X_list:
+#     print("X is:", X)
+#     for homo_deg in homo_degrees:
+#         for time in range(total_times):
+#             Graph, friend_pref, adopt_nodes = create_network(node_num=50,
+#                                                              p=0.1,
+#                                                              pref_range=10,
+#                                                              pref_dim=2,
+#                                                              homo_degree=homo_deg)
+#
+#             for policy in policies:
+#                 new_graph = copy.deepcopy(Graph)
+#                 new_adopted_node = copy.deepcopy(adopt_nodes)
+#                 # plt.subplot(161+count)
+#                 count += 1
+#                 if policy not in overall_adoption:
+#                     overall_adoption[policy] = plot_adoption(individual_type='neutral',
+#                                                              policy=policy,
+#                                                              X = X,
+#                                                              Graph=new_graph,
+#                                                              friend_est_pref=friend_pref,
+#                                                              adopted_node=new_adopted_node)
+#                 else:
+#                     overall_adoption[policy] += plot_adoption(individual_type='neutral',
+#                                                              policy=policy,
+#                                                              X = X,
+#                                                              Graph=new_graph,
+#                                                              friend_est_pref=friend_pref,
+#                                                              adopted_node=new_adopted_node)
+#         for policy in policies:
+#             overall_adoption[policy] /= total_times
+#         print('homophily is :', homo_deg)
+#         print(overall_adoption)
