@@ -15,7 +15,6 @@ for i in range(X_number):
     X_list.append(np.random.choice(random_set,2, replace=True).tolist())
 
 
-# X_list = [[1, -1], [1, -1], [1, -1], [1, -1], [1, 1], [-1, -1], [1, -1]]
 plt.figure(num=1, figsize=(30, 10), dpi=80, facecolor='yellow', edgecolor='k')
 plt.figure(num=2, figsize=(20, 10), dpi=80, facecolor='yellow', edgecolor='k')
 # plt.figure(num=3, figsize=(20, 10), dpi=80, facecolor='yellow', edgecolor='k')
