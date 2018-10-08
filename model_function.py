@@ -459,7 +459,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
             for time in past_reward.keys():
                 if len(past_reward[time]) == 0:
                     continue
-                if node in past_reward[time] and len(past_reward[time][node][0]) <= 0:
+                if node in past_reward[time] and len(past_reward[time][node][0]) > 0:
                     temp_reward.append(past_reward[time][node][1])
         # print(np.nansum(temp_reward))
         # print(temp_reward)
