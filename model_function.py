@@ -254,7 +254,7 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
             except Exception as e:
                 print(e)
 
-    seed_node_num = int(node_num * 0.015)
+    seed_node_num = int(node_num * 0.02)
     seed_nodes = np.random.choice(node_num, seed_node_num, replace=False)
 
     adopted_node = {node: [0] for node in seed_nodes}
@@ -277,14 +277,14 @@ def set_personal_pref(Graph, homophily_degree, pref_dim):
     # print(eigenvects[:,-3:-1].T)
     if homophily_degree == 'strong':
         # 1~5
-        b_combinations = b_combinations.dot(eigenvects[:, :2].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 0:2].T).T
         # print(b_combinations)
         # new_b_combinations = b_combinations_.dot(eigenvects[:,-3:-1].T).T
         # print(new_b_combinations)
     elif homophily_degree == 'medium':
-        b_combinations = b_combinations.dot(eigenvects[:, 50:52].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 15:17].T).T
     elif homophily_degree == 'weak':
-        b_combinations = b_combinations.dot(eigenvects[:, 150:152].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 40:42].T).T
         # print(b_combinations)
 
     for n_idx, n in enumerate(Graph.nodes()):
@@ -344,6 +344,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
 
 
     for X in X_list:
+        # print("Current X is:", X)
         temp_adopted_nodes = copy.deepcopy(adopted_node)
         temp_remove_nodes = {}
         parent_recommends = {}
@@ -363,7 +364,10 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
             if len(temp_adopted_nodes) <= 0:
                 last_time = time - 1
                 # print("No adopted nodes, error!")
+                # print(last_time)
                 break
+            # print('For time: ',time, "Current adopt node: ",list(temp_adopted_nodes.keys()))
+            new_adopted_nodes = {}
             for node in graph.nodes():
 
                 if node in temp_adopted_nodes and len(graph.neighbors(node)) > 0:
@@ -400,8 +404,8 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                             # print('recommendation successful!')
                             node_feedback = 1
                             reputation[node] += 1
-                            if chosen_node not in temp_adopted_nodes and chosen_node not in temp_remove_nodes:
-                                temp_adopted_nodes[chosen_node] = [time]
+                            if (chosen_node not in temp_adopted_nodes) and (chosen_node not in temp_remove_nodes):
+                                new_adopted_nodes[chosen_node] = [time]
 
                             parent_recommends[chosen_node].append(node)
                         else:
@@ -424,7 +428,8 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         if nbr not in chosen_list:
                             cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
-                    del temp_adopted_nodes[node]
+                    # del temp_adopted_nodes[node]
+                    # print("delete: ", node, ", result is: ",temp_adopted_nodes.keys())
                     temp_remove_nodes[node] = [time]
 
                 if node not in cur_friend_pref:
@@ -433,13 +438,14 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
             friend_pref[time] = cur_friend_pref
+            collective_adopted.append(temp_adopted_nodes)
+            temp_adopted_nodes = new_adopted_nodes
             # print(time)
             total_past_reward[X_name][time] = cur_reward
             if not flag:
                 # print("No adopt?, time is: ",time)
                 last_time = time
                 break
-        collective_adopted.append(temp_adopted_nodes)
 
         friend_pref[0] = friend_pref[last_time]
         # print("All the adopted nodes:", len(temp_remove_nodes.keys()))
@@ -466,19 +472,20 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         result_reward[node] = np.nansum(temp_reward)
         # print("result reward for node: ",node," is ",result_reward[node])
     nx.set_node_attributes(graph, 'reward', result_reward)
-    # result_adopted = {}
-    # for single_adopted in collective_adopted:
-    #     for node in single_adopted:
-    #         if node in result_adopted:
-    #             result_adopted[node].extend(single_adopted[node])
-    #         else:
-    #             result_adopted[node] = single_adopted[node]
+    result_adopted = {}
+    for single_adopted in collective_adopted:
+        for node in single_adopted:
+            if node in result_adopted:
+                result_adopted[node] += 1
+            else:
+                result_adopted[node] = 1
 
-    return graph, collective_adopted, reputation
+    return graph, result_adopted, reputation
 
 
 def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted_node,
                 time_step=3,eps_greedy=0.5, plot_state = False, process_result = None, pref_mse_list = None):
+    # print("Total_time_step:", time_step)
     if process_result is None:
         process_result = {}
     if pref_mse_list is None:
@@ -493,7 +500,7 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
                                                      eps_greedy=eps_greedy,
                                                      process_result=process_result,
                                                      pref_mse_list=pref_mse_list)
-    pos = nx.circular_layout(result__graph)
+    pos = nx.spring_layout(result__graph)
     node_color = []
     node_size = []
     node_reward = nx.get_node_attributes(result__graph, 'reward')
@@ -514,12 +521,14 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
                 labels={node: node for node in result__graph.nodes()},
                 node_color=node_color)
         plt.title('reward ({}): {}'.format(individual_type, policy))
+        plt.show()
 
     return total_reward, reputation
 
 
 def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
                   adopted_node, time_step=3,eps_greedy=0.5, plot_state=False,process_result = None, pref_mse_list = None):
+    print("Total_time_step:", time_step)
     if process_result is None:
         process_result = {}
     if pref_mse_list is None:
@@ -534,21 +543,21 @@ def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
                                                     eps_greedy=eps_greedy,
                                                     process_result=process_result,
                                                     pref_mse_list=pref_mse_list)
-    pos = nx.circular_layout(result_graph)
+    pos = nx.spring_layout(result_graph)
     node_color = []
     node_size = []
     overall_adoption = []
-    for single_adopted in result_adopted:
-        temp_adoption = 0
-        for node in result_graph.nodes():
-            if node in single_adopted:
-                node_color.append('red')
-                node_size.append(len(single_adopted[node]) * 100)
-                temp_adoption += len(single_adopted[node])
-            else:
-                node_size.append(200)
-                node_color.append('blue')
-        overall_adoption.append(temp_adoption)
+    print("All adopted node's number: ", len(result_adopted))
+    for node in result_graph.nodes():
+        if node in result_adopted:
+            node_color.append('red')
+            node_size.append(result_adopted[node]*100)
+            overall_adoption.append(result_adopted[node])
+        else:
+            print("Not adopted: ",node)
+            node_size.append(300)
+            node_color.append('blue')
+            overall_adoption.append(0)
 
     if plot_state:
         nx.draw(G=result_graph,
@@ -559,7 +568,7 @@ def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
                 labels={node: node for node in Graph.nodes()},
                 node_color=node_color)
         plt.title('adoption : {}'.format(policy))
-
+        plt.show()
     return overall_adoption,reputation
 
 

@@ -38,8 +38,12 @@ def graph_eigen_centrality(Graph):
     eigenvals, eigenvects = np.linalg.eig(adj_mat)
     idx = eigenvals.argsort()[::-1]
     eigenvects = eigenvects[:, idx]
-
-    return eigenvects[:,0]
+    ret_vector = eigenvects[:,0]
+    eig_sum = 0
+    for i in range(len(ret_vector)):
+        eig_sum += ret_vector[i]
+    ret_vector /= eig_sum
+    return ret_vector
 
 
 def graph_eigen(Graph):

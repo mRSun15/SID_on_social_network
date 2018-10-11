@@ -83,7 +83,7 @@ for homo_deg in homo_degrees:
                                                                  friend_est_pref=new_friend_pref,
                                                                  adopted_node=new_adopted_node,
                                                                  eps_greedy=eps,
-                                                                 time_step=10,
+                                                                 time_step=5,
                                                                  process_result=temp_process_result[policy+str(eps)],
                                                                  pref_mse_list=temp_mse_list[policy + str(eps)])
 
@@ -171,19 +171,19 @@ for homo_deg in homo_degrees:
             new_performance[policy]['var_medium'] = np.median(overall_variance[policy])
 
 
-    with open('result_data/'+str(homo_deg)+ '_adopt_output.csv', 'w') as csv_file:
+    with open('new_res_data/'+str(homo_deg)+ '_adopt_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
         for key, value in new_reward.items():
             writer.writerow([key, value])
-    with open('result_data/'+str(homo_deg) + '_var_output.csv', 'w') as csv_file:
+    with open('new_res_data/'+str(homo_deg) + '_var_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
         for key, value in overall_variance.items():
             writer.writerow([key, value])
-    with open('result_data/'+str(homo_deg) + '_process_res.pkl', 'wb') as p_file:
+    with open('new_res_data/'+str(homo_deg) + '_process_res.pkl', 'wb') as p_file:
         pickle.dump(overall_processed_res, p_file)
-    with open('result_data/'+str(homo_deg) + '_pair_vectors.pkl', 'wb') as v_file:
+    with open('new_res_data/'+str(homo_deg) + '_pair_vectors.pkl', 'wb') as v_file:
         pickle.dump(overall_pair_vectors, v_file)
-    with open('result_data/'+str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
+    with open('new_res_data/'+str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
         pickle.dump(overall_mse_list, m_file)
 
     # statistic, p_value = scipy.stats.ttest_ind(overall_reward['balanced'], overall_reward['greedy'])
