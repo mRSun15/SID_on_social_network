@@ -25,17 +25,19 @@ eps_s = [0.1,0.3,0.5,0.7,0.9]
 count = 0
 overall_reward = {}
 overall_variance = {}
-total_times = 50
+total_times = 10
 print("X is:", X_list)
 rank_list = {}
 # state = True
 
 for homo_deg in homo_degrees:
+    overall_phase_adopted = {}
     overall_pair_vectors = []
     overall_processed_res = []
     overall_mse_list = []
     rank_reputation = []
     relative_reputation = []
+    overall_network_pref = []
     print('Homedeg is:', homo_deg)
 
     for policy in policies:
@@ -43,9 +45,11 @@ for homo_deg in homo_degrees:
             for eps in eps_s:
                 overall_reward[policy+str(eps)] = []
                 overall_variance[policy+str(eps)] = []
+                overall_phase_adopted[policy+str(eps)] = []
         else:
             overall_reward[policy] = []
             overall_variance[policy] = []
+            overall_phase_adopted[policy] = []
     for time in range(total_times):
         temp_pair_vectors = {}
         print(time)
@@ -57,6 +61,7 @@ for homo_deg in homo_degrees:
                                                          pref_range=10,
                                                          pref_dim=2,
                                                          homo_degree=homo_deg)
+        overall_network_pref.append(Network_Pref_Cal(Graph, X_list))
         # plot the initial state
         # plt.subplot(161+count)
         # count += 1
@@ -76,20 +81,21 @@ for homo_deg in homo_degrees:
                     new_friend_pref = copy.deepcopy(friend_pref)
                     # plt.subplot(161+count)
                     # count += 1
-                    temp_reward, temp_reputation = plot_reward(individual_type='neutral',
+                    temp_reward, temp_reputation, temp_phase_adopted = plot_reward(individual_type='neutral',
                                                                  policy=policy,
                                                                  X_list = X_list,
                                                                  Graph=new_graph,
                                                                  friend_est_pref=new_friend_pref,
                                                                  adopted_node=new_adopted_node,
                                                                  eps_greedy=eps,
-                                                                 time_step=5,
+                                                                 time_step=8,
                                                                  process_result=temp_process_result[policy+str(eps)],
                                                                  pref_mse_list=temp_mse_list[policy + str(eps)])
 
                     if len(temp_process_result[policy+str(eps)].keys()) == 0:
                         print("process_result is None, Error!")
                         exit(0)
+                    overall_phase_adopted[policy+str(eps)].append(temp_phase_adopted)
                     temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reward.values()))
                     overall_reward[policy+str(eps)].append(np.sum(list(temp_reward.values())))
                     overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reward.items()]))
@@ -102,15 +108,16 @@ for homo_deg in homo_degrees:
                 new_friend_pref = copy.deepcopy(friend_pref)
                 # plt.subplot(161+count)
                 # count += 1
-                temp_reward, temp_reputation = plot_reward(individual_type='neutral',
+                temp_reward, temp_reputation, temp_phase_adopted = plot_reward(individual_type='neutral',
                                                              policy=policy,
                                                              X_list=X_list,
                                                              Graph=new_graph,
                                                              friend_est_pref=new_friend_pref,
                                                              adopted_node=new_adopted_node,
-                                                             time_step=5,
+                                                             time_step=8,
                                                              process_result=temp_process_result[policy],
                                                              pref_mse_list=temp_mse_list[policy + str(eps)])
+                overall_phase_adopted[policy].append(temp_phase_adopted)
                 overall_reward[policy].append(np.sum(list(temp_reward.values())))
                 overall_variance[policy].append(np.var([rep for k, rep in temp_reward.items()]))
                 temp_rank_rep[policy] = np.var([rep for k, rep in temp_reward.items()])
@@ -185,6 +192,11 @@ for homo_deg in homo_degrees:
         pickle.dump(overall_pair_vectors, v_file)
     with open('new_res_data/'+str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
         pickle.dump(overall_mse_list, m_file)
+    with open('new_res_data/'+str(homo_deg) + '_phase_adopt.pkl', 'wb') as m_file:
+        pickle.dump(overall_phase_adopted, m_file)
+    with open('new_res_data/'+str(homo_deg) + '_network_pref.pkl', 'wb') as m_file:
+        pickle.dump(overall_network_pref, m_file)
+
 
     # statistic, p_value = scipy.stats.ttest_ind(overall_reward['balanced'], overall_reward['greedy'])
     # print("Statistc: ", statistic, "; p_value: ", p_value)

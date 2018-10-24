@@ -203,17 +203,19 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
                                         k=int(0.3 * node_num),
                                         p=p)
     elif graph_type == 'bba':
-        G1_num = int(0.2*node_num)
-        G1 = nx.barabasi_albert_graph(n = G1_num,
-                                      m = int(G1_num*0.3))
-        G2_num = int(0.3*node_num)
-        G2 = nx.barabasi_albert_graph(n = G2_num,
-                                      m = int(G2_num*0.3))
-        G3_num = node_num - G1_num - G2_num
-        G3 = nx.barabasi_albert_graph(n = G3_num,
-                                      m = int(G3_num*0.3))
-        G1 = Union_Graph(G1, G2)
-        Graph = Union_Graph(G1, G3)
+        Graph = nx.barabasi_albert_graph(n=node_num,
+                                         m=10)
+        # G1_num = int(0.2*node_num)
+        # G1 = nx.barabasi_albert_graph(n = G1_num,
+        #                               m = int(G1_num*0.05))
+        # G2_num = int(0.3*node_num)
+        # G2 = nx.barabasi_albert_graph(n = G2_num,
+        #                               m = int(G2_num*0.05))
+        # G3_num = node_num - G1_num - G2_num
+        # G3 = nx.barabasi_albert_graph(n = G3_num,
+        #                               m = int(G3_num*0.05))
+        # G1 = Union_Graph(G1, G2)
+        # Graph = Union_Graph(G1, G3)
 
     Graph = set_personal_pref(Graph, homophily_degree=homo_degree, pref_dim=pref_dim)
 
@@ -254,14 +256,18 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
             except Exception as e:
                 print(e)
 
-    seed_node_num = int(node_num * 0.02)
-    seed_nodes = np.random.choice(node_num, seed_node_num, replace=False)
-
-    adopted_node = {node: [0] for node in seed_nodes}
+    adopted_node = generate_initial_adopt(node_num, 0.01)
 
     # print("successfully create graph")
     return Graph, friend_pref_estimated, adopted_node
 
+def generate_initial_adopt(node_num, seed_portion = 0.01):
+    seed_node_num = int(node_num * seed_portion)
+    seed_nodes = np.random.choice(node_num, seed_node_num, replace=False)
+
+    adopted_node = {node: [0] for node in seed_nodes}
+
+    return adopted_node
 
 def set_personal_pref(Graph, homophily_degree, pref_dim):
     # print("set personal pref")
@@ -282,9 +288,9 @@ def set_personal_pref(Graph, homophily_degree, pref_dim):
         # new_b_combinations = b_combinations_.dot(eigenvects[:,-3:-1].T).T
         # print(new_b_combinations)
     elif homophily_degree == 'medium':
-        b_combinations = b_combinations.dot(eigenvects[:, 15:17].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 4:6].T).T
     elif homophily_degree == 'weak':
-        b_combinations = b_combinations.dot(eigenvects[:, 40:42].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 30:32].T).T
         # print(b_combinations)
 
     for n_idx, n in enumerate(Graph.nodes()):
@@ -344,8 +350,10 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
 
 
     for X in X_list:
+        X_adopted = []
         # print("Current X is:", X)
-        temp_adopted_nodes = copy.deepcopy(adopted_node)
+        temp_adopted_nodes = generate_initial_adopt(len(graph.nodes()))
+        # temp_adopted_nodes = copy.deepcopy(adopted_node)
         temp_remove_nodes = {}
         parent_recommends = {}
         for n in graph.nodes():
@@ -404,14 +412,12 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                             # print('recommendation successful!')
                             node_feedback = 1
                             reputation[node] += 1
-                            if (chosen_node not in temp_adopted_nodes) and (chosen_node not in temp_remove_nodes):
-                                new_adopted_nodes[chosen_node] = [time]
-
-                            parent_recommends[chosen_node].append(node)
                         else:
                             node_feedback = 0
+                        if (chosen_node not in temp_adopted_nodes) and (chosen_node not in temp_remove_nodes):
+                            new_adopted_nodes[chosen_node] = [time]
                         flag = True
-
+                        parent_recommends[chosen_node].append(node)
                         new_mean, new_cov = update_friend_pref(prior_theta=friend_pref[time - 1][node][chosen_node],
                                                                X=X,
                                                                y=node_feedback,
@@ -438,7 +444,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
             friend_pref[time] = cur_friend_pref
-            collective_adopted.append(temp_adopted_nodes)
+            X_adopted.append(temp_adopted_nodes)
             temp_adopted_nodes = new_adopted_nodes
             # print(time)
             total_past_reward[X_name][time] = cur_reward
@@ -447,6 +453,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                 last_time = time
                 break
 
+        collective_adopted.append(X_adopted)
         friend_pref[0] = friend_pref[last_time]
         # print("All the adopted nodes:", len(temp_remove_nodes.keys()))
         pref_mse_list[X_name] = compute_pref_mse(friend_pref[0], graph)
@@ -473,14 +480,22 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         # print("result reward for node: ",node," is ",result_reward[node])
     nx.set_node_attributes(graph, 'reward', result_reward)
     result_adopted = {}
-    for single_adopted in collective_adopted:
-        for node in single_adopted:
-            if node in result_adopted:
-                result_adopted[node] += 1
-            else:
-                result_adopted[node] = 1
+    for X_adopted in collective_adopted:
+        for single_adopted in X_adopted:
+            for node in single_adopted:
+                if node in result_adopted:
+                    result_adopted[node] += 1
+                else:
+                    result_adopted[node] = 1
 
-    return graph, result_adopted, reputation
+    phase_adopted = []
+    for X_adopted in collective_adopted:
+        temp_phase_adopted = []
+        for single_adopted in X_adopted:
+            temp_phase_adopted.append(len(single_adopted))
+        phase_adopted.append(temp_phase_adopted)
+
+    return graph, result_adopted, reputation, phase_adopted
 
 
 def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted_node,
@@ -490,16 +505,16 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
         process_result = {}
     if pref_mse_list is None:
         pref_mse_list = {}
-    result__graph, result_adopted, reputation = graph_simulation(graph=Graph,
-                                                     individual_type=individual_type,
-                                                     friend_pref=friend_est_pref,
-                                                     adopted_node=adopted_node,
-                                                     X_list=X_list,
-                                                     policy=policy,
-                                                     total_time=time_step,
-                                                     eps_greedy=eps_greedy,
-                                                     process_result=process_result,
-                                                     pref_mse_list=pref_mse_list)
+    result__graph, result_adopted, reputation, phase_adopted = graph_simulation(graph=Graph,
+                                                                             individual_type=individual_type,
+                                                                             friend_pref=friend_est_pref,
+                                                                             adopted_node=adopted_node,
+                                                                             X_list=X_list,
+                                                                             policy=policy,
+                                                                             total_time=time_step,
+                                                                             eps_greedy=eps_greedy,
+                                                                             process_result=process_result,
+                                                                             pref_mse_list=pref_mse_list)
     pos = nx.spring_layout(result__graph)
     node_color = []
     node_size = []
@@ -523,7 +538,7 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
         plt.title('reward ({}): {}'.format(individual_type, policy))
         plt.show()
 
-    return total_reward, reputation
+    return total_reward, reputation, phase_adopted
 
 
 def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
@@ -533,16 +548,16 @@ def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
         process_result = {}
     if pref_mse_list is None:
         pref_mse_list = {}
-    result_graph, result_adopted, reputation = graph_simulation(graph=Graph,
-                                                    individual_type=individual_type,
-                                                    friend_pref=friend_est_pref,
-                                                    adopted_node=adopted_node,
-                                                    X_list=X_list,
-                                                    policy=policy,
-                                                    total_time=time_step,
-                                                    eps_greedy=eps_greedy,
-                                                    process_result=process_result,
-                                                    pref_mse_list=pref_mse_list)
+    result_graph, result_adopted, reputation, phase_adopted = graph_simulation(graph=Graph,
+                                                                            individual_type=individual_type,
+                                                                            friend_pref=friend_est_pref,
+                                                                            adopted_node=adopted_node,
+                                                                            X_list=X_list,
+                                                                            policy=policy,
+                                                                            total_time=time_step,
+                                                                            eps_greedy=eps_greedy,
+                                                                            process_result=process_result,
+                                                                            pref_mse_list=pref_mse_list)
     pos = nx.spring_layout(result_graph)
     node_color = []
     node_size = []
@@ -571,24 +586,38 @@ def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
         plt.show()
     return overall_adoption,reputation
 
+def Network_Pref_Cal(Graph, X_list):
+    initial_nodes = {'pos': 0, 'neg': 0}
+    for X in X_list:
+        for n in Graph.nodes():
+            temp_reward = logistic_func(X, Graph.node[n]['pref'])
+            if temp_reward > 0:
+                initial_nodes['pos'] += 1
+            else:
+                initial_nodes['neg'] += 1
+    return initial_nodes
 
-def Graph_Initial_Check(Graph, X, adopted_node, homo_degree):
+def Graph_Initial_Check(Graph, X_list, adopted_node, homo_degree):
     initial_nodes = {'pos': 0, 'neg': 0}
     adopted_info = {}
     result_nodes = {}
     for n in Graph.nodes():
-        temp_reward = logistic_func(X, Graph.node[n]['pref'])
-        if temp_reward >0:
-            initial_nodes['pos'] += 1
-            result_nodes[n] = [0]
-        else:
-            initial_nodes['neg'] += 1
-    for n in adopted_node:
-        temp_reward = logistic_func(X, Graph.node[n]['pref'])
-        if temp_reward > 0:
-            adopted_info[n] = 'pos'
-        else:
-            adopted_info[n] = 'neg'
+        result_nodes[n] = 0
+    for X in X_list:
+        for n in Graph.nodes():
+            temp_reward = logistic_func(X, Graph.node[n]['pref'])
+            if temp_reward >0:
+                initial_nodes['pos'] += 1
+                result_nodes[n] +=1
+            else:
+                initial_nodes['neg'] += 1
+                result_nodes[n] += -1
+        for n in adopted_node:
+            temp_reward = logistic_func(X, Graph.node[n]['pref'])
+            if temp_reward > 0:
+                adopted_info[n] = 'pos'
+            else:
+                adopted_info[n] = 'neg'
 
     # print(initial_nodes)
     # print(adopted_info)
@@ -596,7 +625,7 @@ def Graph_Initial_Check(Graph, X, adopted_node, homo_degree):
     node_color = []
     node_size = []
     for node in Graph.nodes():
-        if node in result_nodes:
+        if result_nodes[node] >= 0:
             node_color.append('red')
             node_size.append(300)
         else:
