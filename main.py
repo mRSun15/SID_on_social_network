@@ -2,16 +2,18 @@ import csv
 import seaborn as sns
 from model_function import *
 import pickle
+import random
 
 
 sns.set()
-homo_degrees = ['weak', 'medium', 'strong']
-
+# homo_degrees = ['weak', 'medium', 'strong']
+homo_degrees = ['weak','2_medium','1_medium','medium','medium_1','medium_2','medium_3','strong']
 X_number = 10
 random_set = [-1, 1]
 X_list = []
-for i in range(X_number):
-    X_list.append(np.random.choice(random_set,2, replace=True).tolist())
+Product_list = [[-1,-1], [-1, 1], [1, -1], [1,1]]
+# for i in range(X_number):
+#     X_list.append(np.random.choice(random_set,2, replace=True).tolist())
 
 
 plt.figure(num=1, figsize=(30, 10), dpi=80, facecolor='yellow', edgecolor='k')
@@ -25,11 +27,11 @@ eps_s = [0.1,0.3,0.5,0.7,0.9]
 count = 0
 overall_reward = {}
 overall_variance = {}
-total_times = 10
+total_epochs = 1
 print("X is:", X_list)
 rank_list = {}
 # state = True
-
+Graph_list = {}
 for homo_deg in homo_degrees:
     overall_phase_adopted = {}
     overall_pair_vectors = []
@@ -50,32 +52,87 @@ for homo_deg in homo_degrees:
             overall_reward[policy] = []
             overall_variance[policy] = []
             overall_phase_adopted[policy] = []
-    for time in range(total_times):
-        temp_pair_vectors = {}
-        print(time)
-        temp_rank_rep = {}
-        temp_process_result = {}
-        temp_mse_list = {}
-        Graph, friend_pref, adopt_nodes = create_network(node_num=200,
-                                                         p=0.1,
-                                                         pref_range=10,
-                                                         pref_dim=2,
-                                                         homo_degree=homo_deg)
-        overall_network_pref.append(Network_Pref_Cal(Graph, X_list))
-        # plot the initial state
-        # plt.subplot(161+count)
-        # count += 1
-        # Graph_initial_check(Graph=Graph,
-        #                     X=X,
-        #                     adopted_node=adopt_nodes,
-        #                     homo_degree=homo_deg)
-        eigen_central_vector = graph_eigen_centrality(Graph)
-        temp_pair_vectors['network'] = eigen_central_vector
-        for policy in policies:
-            if policy == 'e-greedy':
-                for eps in eps_s:
-                    temp_mse_list[policy + str(eps)] = {}
-                    temp_process_result[policy + str(eps)] = {}
+    for epoch in range(total_epochs):
+        if epoch not in Graph_list:
+            Graph, friend_pref, adopt_nodes = create_network(node_num=400,
+                                                             p=0.1,
+                                                             pref_range=10,
+                                                             pref_dim=2,
+                                                             homo_degree=homo_deg)
+            Graph_list[epoch] = copy.deepcopy(Graph)
+        else:
+            Graph,friend_pref, adopt_nodes= create_network(node_num=400,
+                                                           graph=Graph_list[epoch],
+                                                           p=0.1,
+                                                           pref_range=10,
+                                                           pref_dim=2,
+                                                           homo_degree=homo_deg)
+        Products = {"positive": [], "negative": []}
+        for product in Product_list:
+            if Product_Property_Catch(Graph, product) > 0:
+                Products['positive'].append(product)
+            else:
+                Products['negative'].append(product)
+
+        print(Products)
+        pos_prods = np.random.choice(np.arange(len(Products['positive'])), int(X_number*0.3), replace=True).tolist()
+        pos_prods = [Products['positive'][i] for i in pos_prods]
+        neg_prods = np.random.choice(np.arange(len(Products['negative'])), int(X_number*0.7), replace=True).tolist()
+        neg_prods = [Products['negative'][i] for i in neg_prods]
+
+        X_list = pos_prods + neg_prods
+        print(X_list)
+        random.shuffle(X_list)
+        print(X_list)
+
+        for time in range(10):
+            print(time)
+            temp_pair_vectors = {}
+            temp_rank_rep = {}
+            temp_process_result = {}
+            temp_mse_list = {}
+            overall_network_pref.append(Network_Pref_Cal(Graph, X_list))
+            # plot the initial state
+            # plt.subplot(161+count)
+            # count += 1
+            # Graph_initial_check(Graph=Graph,
+            #                     X=X,
+            #                     adopted_node=adopt_nodes,
+            #                     homo_degree=homo_deg)
+            eigen_central_vector = graph_eigen_centrality(Graph)
+            temp_pair_vectors['network'] = eigen_central_vector
+            for policy in policies:
+                if policy == 'e-greedy':
+                    for eps in eps_s:
+                        temp_mse_list[policy + str(eps)] = {}
+                        temp_process_result[policy + str(eps)] = {}
+                        new_graph = copy.deepcopy(Graph)
+                        new_adopted_node = copy.deepcopy(adopt_nodes)
+                        new_friend_pref = copy.deepcopy(friend_pref)
+                        # plt.subplot(161+count)
+                        # count += 1
+                        temp_reward, temp_reputation, temp_phase_adopted = plot_reward(individual_type='neutral',
+                                                                     policy=policy,
+                                                                     X_list = X_list,
+                                                                     Graph=new_graph,
+                                                                     friend_est_pref=new_friend_pref,
+                                                                     adopted_node=new_adopted_node,
+                                                                     eps_greedy=eps,
+                                                                     time_step=8,
+                                                                     process_result=temp_process_result[policy+str(eps)],
+                                                                     pref_mse_list=temp_mse_list[policy + str(eps)])
+
+                        if len(temp_process_result[policy+str(eps)].keys()) == 0:
+                            print("process_result is None, Error!")
+                            exit(0)
+                        overall_phase_adopted[policy+str(eps)].append(temp_phase_adopted)
+                        temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reward.values()))
+                        overall_reward[policy+str(eps)].append(np.sum(list(temp_reward.values())))
+                        overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reward.items()]))
+                        # temp_rank_rep[policy+str(eps)]=np.var([rep for k, rep in temp_reputation.items()])
+                else:
+                    temp_process_result[policy] = {}
+                    temp_mse_list[policy] = {}
                     new_graph = copy.deepcopy(Graph)
                     new_adopted_node = copy.deepcopy(adopt_nodes)
                     new_friend_pref = copy.deepcopy(friend_pref)
@@ -83,48 +140,21 @@ for homo_deg in homo_degrees:
                     # count += 1
                     temp_reward, temp_reputation, temp_phase_adopted = plot_reward(individual_type='neutral',
                                                                  policy=policy,
-                                                                 X_list = X_list,
+                                                                 X_list=X_list,
                                                                  Graph=new_graph,
                                                                  friend_est_pref=new_friend_pref,
                                                                  adopted_node=new_adopted_node,
-                                                                 eps_greedy=eps,
                                                                  time_step=8,
-                                                                 process_result=temp_process_result[policy+str(eps)],
-                                                                 pref_mse_list=temp_mse_list[policy + str(eps)])
-
-                    if len(temp_process_result[policy+str(eps)].keys()) == 0:
-                        print("process_result is None, Error!")
-                        exit(0)
-                    overall_phase_adopted[policy+str(eps)].append(temp_phase_adopted)
-                    temp_pair_vectors[policy+str(eps)] = np.array(list(temp_reward.values()))
-                    overall_reward[policy+str(eps)].append(np.sum(list(temp_reward.values())))
-                    overall_variance[policy+str(eps)].append(np.var([rep for k, rep in temp_reward.items()]))
-                    # temp_rank_rep[policy+str(eps)]=np.var([rep for k, rep in temp_reputation.items()])
-            else:
-                temp_process_result[policy] = {}
-                temp_mse_list[policy + str(eps)] = {}
-                new_graph = copy.deepcopy(Graph)
-                new_adopted_node = copy.deepcopy(adopt_nodes)
-                new_friend_pref = copy.deepcopy(friend_pref)
-                # plt.subplot(161+count)
-                # count += 1
-                temp_reward, temp_reputation, temp_phase_adopted = plot_reward(individual_type='neutral',
-                                                             policy=policy,
-                                                             X_list=X_list,
-                                                             Graph=new_graph,
-                                                             friend_est_pref=new_friend_pref,
-                                                             adopted_node=new_adopted_node,
-                                                             time_step=8,
-                                                             process_result=temp_process_result[policy],
-                                                             pref_mse_list=temp_mse_list[policy + str(eps)])
-                overall_phase_adopted[policy].append(temp_phase_adopted)
-                overall_reward[policy].append(np.sum(list(temp_reward.values())))
-                overall_variance[policy].append(np.var([rep for k, rep in temp_reward.items()]))
-                temp_rank_rep[policy] = np.var([rep for k, rep in temp_reward.items()])
-                temp_pair_vectors[policy] = np.array(list(temp_reward.values()))
-        overall_pair_vectors.append(temp_pair_vectors)
-        overall_processed_res.append(temp_process_result)
-        overall_mse_list.append(temp_mse_list)
+                                                                 process_result=temp_process_result[policy],
+                                                                 pref_mse_list=temp_mse_list[policy])
+                    overall_phase_adopted[policy].append(temp_phase_adopted)
+                    overall_reward[policy].append(np.sum(list(temp_reward.values())))
+                    overall_variance[policy].append(np.var([rep for k, rep in temp_reward.items()]))
+                    temp_rank_rep[policy] = np.var([rep for k, rep in temp_reward.items()])
+                    temp_pair_vectors[policy] = np.array(list(temp_reward.values()))
+            overall_pair_vectors.append(temp_pair_vectors)
+            overall_processed_res.append(temp_process_result)
+            overall_mse_list.append(temp_mse_list)
 
         # compute the every time's ranking
 
@@ -178,23 +208,23 @@ for homo_deg in homo_degrees:
             new_performance[policy]['var_medium'] = np.median(overall_variance[policy])
 
 
-    with open('new_res_data/'+str(homo_deg)+ '_adopt_output.csv', 'w') as csv_file:
+    with open('test_data_neg/'+str(homo_deg)+ '_adopt_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
         for key, value in new_reward.items():
             writer.writerow([key, value])
-    with open('new_res_data/'+str(homo_deg) + '_var_output.csv', 'w') as csv_file:
+    with open('test_data_neg/'+str(homo_deg) + '_var_output.csv', 'w') as csv_file:
         writer = csv.writer(csv_file)
         for key, value in overall_variance.items():
             writer.writerow([key, value])
-    with open('new_res_data/'+str(homo_deg) + '_process_res.pkl', 'wb') as p_file:
+    with open('test_data_neg/'+str(homo_deg) + '_process_res.pkl', 'wb') as p_file:
         pickle.dump(overall_processed_res, p_file)
-    with open('new_res_data/'+str(homo_deg) + '_pair_vectors.pkl', 'wb') as v_file:
+    with open('test_data_neg/'+str(homo_deg) + '_pair_vectors.pkl', 'wb') as v_file:
         pickle.dump(overall_pair_vectors, v_file)
-    with open('new_res_data/'+str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
+    with open('test_data_neg/'+str(homo_deg) + '_mse_lists.pkl', 'wb') as m_file:
         pickle.dump(overall_mse_list, m_file)
-    with open('new_res_data/'+str(homo_deg) + '_phase_adopt.pkl', 'wb') as m_file:
+    with open('test_data_neg/'+str(homo_deg) + '_phase_adopt.pkl', 'wb') as m_file:
         pickle.dump(overall_phase_adopted, m_file)
-    with open('new_res_data/'+str(homo_deg) + '_network_pref.pkl', 'wb') as m_file:
+    with open('test_data_neg/'+str(homo_deg) + '_network_pref.pkl', 'wb') as m_file:
         pickle.dump(overall_network_pref, m_file)
 
 
@@ -213,7 +243,7 @@ for homo_deg in homo_degrees:
     ind = np.arange(len(new_performance.keys()))
     width = 0.6
     plt.figure(1)
-    plt.subplot(131 + count)
+    plt.subplot(331 + count)
     p1 = plt.bar(ind, median, width, yerr=std)
 
     plt.xticks(ind, new_performance.keys())
@@ -243,7 +273,7 @@ for homo_deg in homo_degrees:
     std = [new_performance[policy]['var_std'] for policy in new_performance.keys()]
     ind = np.arange(len(new_performance.keys()))
     plt.figure(2)
-    plt.subplot(131+count)
+    plt.subplot(331+count)
     p1 = plt.bar(ind, median, width, yerr=std)
     plt.xticks(ind, new_performance.keys())
     plt.yticks(np.arange(0, 20, 10))

@@ -192,19 +192,22 @@ def Union_Graph(G, H):
         U.add_edge(G_node, H_node)
     return U
 
-def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', graph_type='bba', mean_pref=5, std_pref=6):
+def create_network(node_num, p, pref_range, graph = None,pref_dim=2, homo_degree='strong', graph_type='bba', mean_pref=5, std_pref=6):
     friend_pref_estimated = {}
     friend_pref_estimated[0] = {}
+    if graph is None:
+        if graph_type == 'erdo':
+            Graph = nx.erdos_renyi_graph(node_num, p)
+        elif graph_type == 'ws':
+            Graph = nx.watts_strogatz_graph(n=node_num,
+                                            k=int(0.3 * node_num),
+                                            p=p)
+        elif graph_type == 'bba':
+            Graph = nx.barabasi_albert_graph(n=node_num,
+                                             m=10)
+    else:
+        Graph = graph
 
-    if graph_type == 'erdo':
-        Graph = nx.erdos_renyi_graph(node_num, p)
-    elif graph_type == 'ws':
-        Graph = nx.watts_strogatz_graph(n=node_num,
-                                        k=int(0.3 * node_num),
-                                        p=p)
-    elif graph_type == 'bba':
-        Graph = nx.barabasi_albert_graph(n=node_num,
-                                         m=10)
         # G1_num = int(0.2*node_num)
         # G1 = nx.barabasi_albert_graph(n = G1_num,
         #                               m = int(G1_num*0.05))
@@ -238,7 +241,7 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
             try:
                 friend_pref_estimated[0][node][nbr] = {}
                 pref_mean = [node_pref[node][dim] for dim in range(pref_dim)]
-                temp_cov = 0.5*np.identity(pref_dim)
+                temp_cov = 0.01*np.identity(pref_dim)
                 pref_noise = np.random.multivariate_normal(mean=np.zeros(pref_dim),
                                                            cov=temp_cov)
 
@@ -255,13 +258,17 @@ def create_network(node_num, p, pref_range, pref_dim=2, homo_degree='strong', gr
 
             except Exception as e:
                 print(e)
+    old_nodes = {}
 
-    adopted_node = generate_initial_adopt(node_num, 0.01)
+    adopted_node = generate_initial_adopt(old_nodes,node_num, 0.01,is_new=True)
 
     # print("successfully create graph")
     return Graph, friend_pref_estimated, adopted_node
 
-def generate_initial_adopt(node_num, seed_portion = 0.01):
+def generate_initial_adopt(old_seeds,node_num, seed_portion = 0.01,is_new = False):
+    if not is_new:
+        return old_seeds
+
     seed_node_num = int(node_num * seed_portion)
     seed_nodes = np.random.choice(node_num, seed_node_num, replace=False)
 
@@ -275,7 +282,7 @@ def set_personal_pref(Graph, homophily_degree, pref_dim):
                                                     cov=np.identity(pref_dim),
                                                     size=2).reshape(pref_dim, 2)
     b_sum = np.sum(np.abs(b_combinations_), axis=1, keepdims=True)
-    b_combinations = b_combinations_ / b_sum
+    b_combinations = (b_combinations_ / b_sum)*10
     eigenvals, eigenvects = graph_eigen(Graph)
 
     # print(eigenvects[:,:2].T)
@@ -287,16 +294,27 @@ def set_personal_pref(Graph, homophily_degree, pref_dim):
         # print(b_combinations)
         # new_b_combinations = b_combinations_.dot(eigenvects[:,-3:-1].T).T
         # print(new_b_combinations)
+    elif homophily_degree == 'medium_3':
+        b_combinations = b_combinations.dot(eigenvects[:, 40:42].T).T
+    elif homophily_degree == 'medium_2':
+        b_combinations = b_combinations.dot(eigenvects[:, 90:92].T).T
+    elif homophily_degree == 'medium_1':
+        b_combinations = b_combinations.dot(eigenvects[:, 140:142].T).T
     elif homophily_degree == 'medium':
-        b_combinations = b_combinations.dot(eigenvects[:, 4:6].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 190:192].T).T
+    elif homophily_degree == '1_medium':
+        b_combinations = b_combinations.dot(eigenvects[:, 250:252].T).T
+    elif homophily_degree == '2_medium':
+        b_combinations = b_combinations.dot(eigenvects[:, 300:302].T).T
     elif homophily_degree == 'weak':
-        b_combinations = b_combinations.dot(eigenvects[:, 30:32].T).T
+        b_combinations = b_combinations.dot(eigenvects[:, 350:352].T).T
         # print(b_combinations)
 
     for n_idx, n in enumerate(Graph.nodes()):
         Graph.node[n]['pref'] = b_combinations[n_idx]
 
     # node_pref = nx.get_node_attributes(Graph, 'pref')
+    # print(node_pref)
     # for dim in range(pref_dim):
     #     pref_list = [node_pref[node][dim] for node in Graph.nodes()]
     #     pref_std = np.std(pref_list)
@@ -352,7 +370,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
     for X in X_list:
         X_adopted = []
         # print("Current X is:", X)
-        temp_adopted_nodes = generate_initial_adopt(len(graph.nodes()))
+        temp_adopted_nodes = generate_initial_adopt(copy.deepcopy(adopted_node),len(graph.nodes()),is_new=False)
         # temp_adopted_nodes = copy.deepcopy(adopted_node)
         temp_remove_nodes = {}
         parent_recommends = {}
@@ -596,6 +614,14 @@ def Network_Pref_Cal(Graph, X_list):
             else:
                 initial_nodes['neg'] += 1
     return initial_nodes
+
+def Product_Property_Catch(Graph, X):
+    total_reward = 0
+    for n in Graph.nodes():
+        temp_reward = logistic_func(X, Graph.node[n]['pref'])
+        total_reward += temp_reward
+
+    return total_reward
 
 def Graph_Initial_Check(Graph, X_list, adopted_node, homo_degree):
     initial_nodes = {'pos': 0, 'neg': 0}
