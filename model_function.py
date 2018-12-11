@@ -349,7 +349,7 @@ def compute_pref_mse(estimate_pref, Graph):
 
     return mse_loss
 
-def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
+def graph_simulation(graph, individual_type, policy, friend_pref, seed_nodes,
                      X_list, total_time, eps_greedy, process_result, pref_mse_list):
 
     total_past_reward = {}
@@ -360,7 +360,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         ucb_counts[n] = {}
         reputation[n] = 0
         for nbr in graph.neighbors(n):
-            # print(n, nbr)
+
             ucb_counts[n][nbr] = {'choose': 0, 'not_choose': 0}
     name_count = 1
     pref_mse_list['0_0_0'] = compute_pref_mse(friend_pref[0], graph)
@@ -370,8 +370,8 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
     for X in X_list:
         X_adopted = []
         # print("Current X is:", X)
-        temp_adopted_nodes = generate_initial_adopt(copy.deepcopy(adopted_node),len(graph.nodes()),is_new=False)
-        # temp_adopted_nodes = copy.deepcopy(adopted_node)
+        temp_diffusing_nodes = generate_initial_adopt(copy.deepcopy(seed_nodes), len(graph.nodes()), is_new=False)
+
         temp_remove_nodes = {}
         parent_recommends = {}
         for n in graph.nodes():
@@ -384,20 +384,23 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
         for time in range(1, total_time):
             # print(time)
             # print('time is: ', time)
+
             flag = False
             cur_reward = {}
             cur_friend_pref = {}
-            if len(temp_adopted_nodes) <= 0:
+            if len(temp_diffusing_nodes) <= 0:
                 last_time = time - 1
                 # print("No adopted nodes, error!")
                 # print(last_time)
                 break
-            # print('For time: ',time, "Current adopt node: ",list(temp_adopted_nodes.keys()))
+            # print('For time: ',time, "Current adopt node: ",list(temp_diffusing_nodes.keys()))
             new_adopted_nodes = {}
             for node in graph.nodes():
 
-                if node in temp_adopted_nodes and len(graph.neighbors(node)) > 0:
-                    # adopted recommendation stratedy
+                if node in temp_diffusing_nodes and len(graph.neighbors(node)) > 0:
+                    '''
+                    decide the diffusion nodes based on the strategies
+                    '''
                     chosen_list, reward = friend_selection(Graph=graph,
                                                            individual_type=individual_type,
                                                            individual_node=node,
@@ -410,7 +413,9 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                                                            ucb_counts=ucb_counts,
                                                            epsilon_greedy=eps_greedy)
 
-
+                    '''
+                    compute the reward for the selection
+                    '''
                     cur_friend_pref[node] = {}
                     if len(chosen_list) <= 0:
                         # print("Node: ",node," choose no node!")
@@ -423,7 +428,7 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                     cur_reward[node] = [chosen_list, np.sum(list(friend_reward.values()))]
                     # print("Time: ", time," Current reward is ", friend_reward)
 
-                    # update the predicted preference
+
 
                     for chosen_node in chosen_list:
                         if friend_reward[chosen_node] >= 0:
@@ -432,10 +437,14 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                             reputation[node] += 1
                         else:
                             node_feedback = 0
-                        if (chosen_node not in temp_adopted_nodes) and (chosen_node not in temp_remove_nodes):
+                        if (chosen_node not in temp_diffusing_nodes) and (chosen_node not in temp_remove_nodes):
                             new_adopted_nodes[chosen_node] = [time]
                         flag = True
                         parent_recommends[chosen_node].append(node)
+
+                        '''
+                        update the preference
+                        '''
                         new_mean, new_cov = update_friend_pref(prior_theta=friend_pref[time - 1][node][chosen_node],
                                                                X=X,
                                                                y=node_feedback,
@@ -452,8 +461,8 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         if nbr not in chosen_list:
                             cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
-                    # del temp_adopted_nodes[node]
-                    # print("delete: ", node, ", result is: ",temp_adopted_nodes.keys())
+                    # del temp_diffusing_nodes[node]
+                    # print("delete: ", node, ", result is: ",temp_diffusing_nodes.keys())
                     temp_remove_nodes[node] = [time]
 
                 if node not in cur_friend_pref:
@@ -462,8 +471,9 @@ def graph_simulation(graph, individual_type, policy, friend_pref, adopted_node,
                         cur_friend_pref[node][nbr] = friend_pref[time - 1][node][nbr]
 
             friend_pref[time] = cur_friend_pref
-            X_adopted.append(temp_adopted_nodes)
-            temp_adopted_nodes = new_adopted_nodes
+
+
+            temp_diffusing_nodes = new_adopted_nodes
             # print(time)
             total_past_reward[X_name][time] = cur_reward
             if not flag:
@@ -524,15 +534,15 @@ def plot_reward(Graph, individual_type, policy, X_list, friend_est_pref, adopted
     if pref_mse_list is None:
         pref_mse_list = {}
     result__graph, result_adopted, reputation, phase_adopted = graph_simulation(graph=Graph,
-                                                                             individual_type=individual_type,
-                                                                             friend_pref=friend_est_pref,
-                                                                             adopted_node=adopted_node,
-                                                                             X_list=X_list,
-                                                                             policy=policy,
-                                                                             total_time=time_step,
-                                                                             eps_greedy=eps_greedy,
-                                                                             process_result=process_result,
-                                                                             pref_mse_list=pref_mse_list)
+                                                                                individual_type=individual_type,
+                                                                                friend_pref=friend_est_pref,
+                                                                                seed_nodes=adopted_node,
+                                                                                X_list=X_list,
+                                                                                policy=policy,
+                                                                                total_time=time_step,
+                                                                                eps_greedy=eps_greedy,
+                                                                                process_result=process_result,
+                                                                                pref_mse_list=pref_mse_list)
     pos = nx.spring_layout(result__graph)
     node_color = []
     node_size = []
@@ -567,15 +577,15 @@ def plot_adoption(Graph, individual_type, policy, X_list, friend_est_pref,
     if pref_mse_list is None:
         pref_mse_list = {}
     result_graph, result_adopted, reputation, phase_adopted = graph_simulation(graph=Graph,
-                                                                            individual_type=individual_type,
-                                                                            friend_pref=friend_est_pref,
-                                                                            adopted_node=adopted_node,
-                                                                            X_list=X_list,
-                                                                            policy=policy,
-                                                                            total_time=time_step,
-                                                                            eps_greedy=eps_greedy,
-                                                                            process_result=process_result,
-                                                                            pref_mse_list=pref_mse_list)
+                                                                               individual_type=individual_type,
+                                                                               friend_pref=friend_est_pref,
+                                                                               seed_nodes=adopted_node,
+                                                                               X_list=X_list,
+                                                                               policy=policy,
+                                                                               total_time=time_step,
+                                                                               eps_greedy=eps_greedy,
+                                                                               process_result=process_result,
+                                                                               pref_mse_list=pref_mse_list)
     pos = nx.spring_layout(result_graph)
     node_color = []
     node_size = []
